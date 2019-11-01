@@ -55,7 +55,7 @@ A list of commonly used resources that I found helpful are listed in the acknowl
 
 ### Built With
 This was all done in Community Visual Studio 2019. 
-* CPP
+* C++
 
 <!-- GETTING STARTED -->
 ## Getting Started
