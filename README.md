@@ -105,7 +105,7 @@ Project Link: [https://https://github.com/ProgrammingLuis/Intel8080](https://htt
 <!-- ACKNOWLEDGEMENTS -->
 ## Acknowledgements
 * [Emulator 101](http://emulator101.com/)
-* [superzazu's emulator] (https://github.com/superzazu/8080)
+* [superzazu's emulator](https://github.com/superzazu/8080)
 
 
 
