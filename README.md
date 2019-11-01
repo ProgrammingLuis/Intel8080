@@ -1,4 +1,5 @@
 <!-- PROJECT LOGO -->
+[![LinkedIn][linkedin-shield]][linkedin-url]
 <br />
 <p align="center">
   <a href="https://github.com/ProgrammingLuis/Intel8080">
@@ -124,5 +125,5 @@ Project Link: [https://https://github.com/ProgrammingLuis/Intel8080](https://htt
 [license-shield]: https://img.shields.io/github/license/othneildrew/Best-README-Template.svg?style=flat-square
 [license-url]: https://github.com/othneildrew/Best-README-Template/blob/master/LICENSE.txt
 [linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=flat-square&logo=linkedin&colorB=555
-[linkedin-url]: https://linkedin.com/in/othneildrew
+[linkedin-url]: https://linkedin.com
 [product-screenshot]: images/screenshot.png
