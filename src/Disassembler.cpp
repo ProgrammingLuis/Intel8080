@@ -1,6 +1,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <iostream>
 
 /*
 	REQUIRES: *codebuffer is a valid pointer to 8080 assembly code,
@@ -12,7 +13,10 @@ int disassemble_8080_op_code(unsigned char* codebuffer, int pc);
 
 int main() {
 
-	std::string fileName = "C:/Users/Hernandez/Desktop/invaders ROM/invaders";
+	std::string fileName;
+
+	std::cout << "Please enter file location." << std::endl;
+	std::cin >> fileName;
 	
 	FILE* f;
 	fopen_s(&f, fileName.c_str(), "rb");
