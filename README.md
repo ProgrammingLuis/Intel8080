@@ -8,7 +8,9 @@
   <h3 align="center">Intel 8080 Microprocessor Emulator</h3>
 
   <p align="center">
+    <br />
     An emulator for the Space Invaders Arcade Machine.
+    <br />
     <br />
     ·
     <a href="https://github.com/ProgrammingLuis/Intel8080/issues">Report Bug</a>
