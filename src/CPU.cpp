@@ -1,6 +1,6 @@
-#include <cstdint>
 #include <cassert>
-#include <iostream>
+#include <cstdint>
+#include "Disassembler.h"
 
 struct ConditionCodes {
 	uint8_t z : 1; // Z (zero) set to 1 when the result is equal to zero
@@ -23,8 +23,15 @@ struct CPU {
 	uint16_t pc; // Program Counter
 	uint8_t* memory; // Memory Buffer
 	ConditionCodes cc; 
-	uint8_t int_enable; 
+	uint8_t int_enable; // interrupt
 };
+
+CPU* CPU_INIT()
+{
+	CPU* cpu = (CPU*) calloc(1, sizeof(CPU));
+	cpu->memory = (uint8_t*) malloc(0x10000);  //16K
+	return cpu;
+}
 
 // Helper Functions //
 
@@ -43,9 +50,15 @@ bool parity(uint8_t x) {
 
 ////////////////////////////Intel 8080 CPU Instructions/////////////////////////
 
+// Data Transfer
+
+void MOV(uint8_t &dst, uint8_t const src) {
+	dst = src;
+}
+
 // Arithmetic //
 
-void ADD(CPU* cpu, uint8_t a, uint8_t val, bool cy) {
+void ADD(CPU* const cpu, uint8_t const a, uint8_t const val, bool const cy) {
 	uint16_t answer = (uint16_t)a + (uint16_t)val + cy;
 	cpu->cc.z = ((answer & 0xff) == 0);
 	cpu->cc.s = ((answer & 0x80) != 0);
@@ -54,96 +67,96 @@ void ADD(CPU* cpu, uint8_t a, uint8_t val, bool cy) {
 	cpu->a = answer & 0xff;
 }
 
-void SUB(CPU* cpu, uint8_t a, uint8_t val, bool cy) {
+void SUB(CPU* const cpu, uint8_t const a, uint8_t const val, bool const cy) {
 	// https://stackoverflow.com/a/8037485
 	ADD(cpu, a, ~val, !cy);
 	cpu->cc.cy = !cpu->cc.cy;
 }
 
 // paired registry helpers (setters and getters)
-void CPU_set_bc(CPU* cpu, uint16_t val) {
+void CPU_set_bc(CPU* const cpu, uint16_t const val) {
 	cpu->b = val >> 8;
 	cpu->c = val & 0xFF;
 }
 
-void CPU_set_de(CPU* cpu, uint16_t val) {
+void CPU_set_de(CPU* const cpu, uint16_t const val) {
 	cpu->d = val >> 8;
 	cpu->e = val & 0xFF;
 }
 
-void CPU_set_hl(CPU* cpu, uint16_t val) {
+void CPU_set_hl(CPU* const cpu, uint16_t const val) {
 	cpu->h = val >> 8;
 	cpu->l = val & 0xFF;
 }
 
-uint16_t CPU_get_bc(CPU* cpu) {
+uint16_t CPU_get_bc(CPU* const cpu) {
 	return (cpu->b << 8) | cpu->c;
 }
 
-uint16_t CPU_get_de(CPU* cpu) {
+uint16_t CPU_get_de(CPU* const cpu) {
 	return (cpu->d << 8) | cpu->e;
 }
 
-uint16_t CPU_get_hl(CPU* cpu) {
+uint16_t CPU_get_hl(CPU* const cpu) {
 	return (cpu->h << 8) | cpu->l;
 }
 
-void DAD(CPU* cpu, uint16_t val) {
+void DAD(CPU* const cpu, uint16_t const val) {
 	cpu->cc.cy = ((CPU_get_hl(cpu) + val) >> 16) & 1;
 	CPU_set_hl(cpu, CPU_get_hl(cpu) + val);
 }
 
-void INR(CPU* cpu, uint8_t &reg) {
+void INR(CPU* const cpu, uint8_t const &reg) {
 	uint8_t carry = cpu->cc.cy;
 	ADD(cpu, reg, 1, false);
 	cpu->cc.cy = carry;
 }
 
-void DCR(CPU* cpu, uint8_t& reg) {
-	uint8_t carry = cpu->cc.cy;
-	SUB(cpu, reg, 1, false);
-	cpu->cc.cy = carry;
+void DCR(CPU* const cpu, uint8_t &reg) {
+	uint8_t res = reg - 1;
+	cpu->cc.z = (res == 0);
+	cpu->cc.s = (0x80 == (res & 0x80));
+	cpu->cc.p = parity(res);
+	reg = res;
 }
-
-// Data Transfer
 
 // Logical
 
-void CMA(CPU* cpu) {
+void CMA(CPU* const cpu) {
 	cpu->a = ~cpu->a;
 }
 
-void STC(CPU* cpu) {
+void STC(CPU* const cpu) {
 	cpu->cc.cy = 1;
 }
 
-void CMC(CPU* cpu) {
+void CMC(CPU* const cpu) {
 	cpu->cc.cy = !cpu->cc.cy;
 }
 
-void RLC(CPU* cpu) {
+void RLC(CPU* const cpu) {
 	cpu->cc.cy = cpu->a >> 7;
 	cpu->a = (cpu->a << 1) | cpu->cc.cy;
 }
 
-void RRC(CPU* cpu) {
+void RRC(CPU* const cpu) {
 	cpu->cc.cy = cpu->a & 1;
 	cpu->a = (cpu->a >> 1) | (cpu->cc.cy << 7);
 }
 
-void RAL(CPU* cpu) {
+void RAL(CPU* const cpu) {
 	const bool cy = cpu->cc.cy;
 	cpu->cc.cy = cpu->a >> 7;
-	cpu->a = (cpu->a << 1) | cy;
+	cpu->a = (cpu->a << 1) | (int) cy;
 }
 
-void RAR(CPU* cpu) {
+void RAR(CPU* const cpu) {
 	const bool cy = cpu->cc.cy;
 	cpu->cc.cy = cpu->a & 1;
 	cpu->a = (cpu->a >> 1) | (cy << 7);
 }
 
-void ANA(CPU* cpu, uint8_t address) {
+void ANA(CPU* const cpu, uint8_t const address) {
 	uint8_t answer = cpu->a & address;
 	cpu->cc.z = ((answer) == 0);
 	cpu->cc.s = (0x80 == (answer & 0x80));
@@ -152,7 +165,7 @@ void ANA(CPU* cpu, uint8_t address) {
 	cpu->a = answer;
 }
 
-void XRA(CPU* cpu, uint8_t address) {
+void XRA(CPU* const cpu, uint8_t const address) {
 	cpu->a ^= address;
 	cpu->cc.z = ((cpu->a) == 0);
 	cpu->cc.s = (0x80 == (cpu->a & 0x80));
@@ -160,7 +173,7 @@ void XRA(CPU* cpu, uint8_t address) {
 	cpu->cc.p = parity(cpu->a);
 }
 
-void ORA(CPU* cpu, uint8_t address) {
+void ORA(CPU* const cpu, uint8_t const address) {
 	cpu->a |= address;
 	cpu->cc.z = ((cpu->a) == 0);
 	cpu->cc.s = (0x80 == (cpu->a & 0x80));
@@ -168,30 +181,30 @@ void ORA(CPU* cpu, uint8_t address) {
 	cpu->cc.p = parity(cpu->a);
 }
 
-void CMP(CPU* cpu, uint8_t address) {
+void CMP(CPU* const cpu, uint8_t const address) {
 	int16_t answer = cpu->a - address;
 	cpu->cc.z = ((answer & 0xFF) == 0);
 	cpu->cc.s = (0x80 == (answer & 0xFF));
 	cpu->cc.cy = answer >> 8;
 	cpu->cc.p = parity(answer & 0xFF);
-	cpu->a = answer;
+	cpu->a = (uint8_t) answer;
 
 }
 
 // Branch
 
-void JMP(CPU* cpu, uint16_t address) {
+void JMP(CPU* const cpu, uint16_t const address) {
 	cpu->pc = address;
 }
 
-void JMP_COND(CPU* cpu, uint16_t address, bool condition) {
+void JMP_COND(CPU* const cpu, uint16_t const address, bool const condition) {
 	if (condition)
 		JMP(cpu, address);
 	else
 		cpu->pc += 2;
 }
 
-void CALL(CPU* cpu, uint16_t address) {
+void CALL(CPU* const cpu, uint16_t const address) {
 	uint16_t    ret = cpu->pc + 2;
 	cpu->memory[cpu->sp - 1] = (ret >> 8) & 0xff;
 	cpu->memory[cpu->sp - 2] = (ret & 0xff);
@@ -199,7 +212,7 @@ void CALL(CPU* cpu, uint16_t address) {
 	cpu->pc = address;
 }
 
-void CALL_COND(CPU* cpu, uint16_t address, bool condition) {
+void CALL_COND(CPU* const cpu, uint16_t const address, bool const condition) {
 	if (condition) {
 		CALL(cpu, address);
 	}
@@ -207,21 +220,99 @@ void CALL_COND(CPU* cpu, uint16_t address, bool condition) {
 		cpu->pc += 2;
 }
 
-void RET(CPU* cpu) {
+void RET(CPU* const cpu) {
 	cpu->pc = cpu->memory[cpu->sp] | (cpu->memory[cpu->sp + 1] << 8);
 	cpu->sp += 2;
 }
 
-void RET_COND(CPU* cpu, bool condition) {
+void RET_COND(CPU* const cpu, bool const condition) {
 	if (condition)
 		RET(cpu);
 }
 
 // Stack
 
+void PUSH(CPU* cpu, std::string registry) {
+	if (registry == "B") {
+		cpu->memory[cpu->sp - 1] = cpu->b;
+		cpu->memory[cpu->sp - 2] = cpu->c;
+		cpu->sp -= 2;
+	}
+	else if (registry == "D") {
+		cpu->memory[cpu->sp - 1] = cpu->d;
+		cpu->memory[cpu->sp - 2] = cpu->e;
+		cpu->sp -= 2;
+	}
+	else if (registry == "H") {
+		cpu->memory[cpu->sp - 1] = cpu->h;
+		cpu->memory[cpu->sp - 2] = cpu->l;
+		cpu->sp -= 2;
+	}
+	else if (registry == "PSW") {
+		cpu->memory[cpu->sp - 1] = cpu->a;
+		uint8_t psw = (cpu->cc.z |
+			cpu->cc.s << 1 |
+			cpu->cc.p << 2 |
+			cpu->cc.cy << 3 |
+			cpu->cc.ac << 4);
+		cpu->memory[cpu->sp - 2] = psw;
+		cpu->sp -= 2;
+	}
+}
+
+void POP(CPU* cpu, std::string registry) {
+	if (registry == "B") {
+		cpu->c = cpu->memory[cpu->sp];
+		cpu->b = cpu->memory[cpu->sp + 1];
+		cpu->sp += 2;
+	}
+	else if (registry == "D") {
+		cpu->d = cpu->memory[cpu->sp];
+		cpu->e = cpu->memory[cpu->sp + 1];
+		cpu->sp += 2;
+	}
+	else if (registry == "H") {
+		cpu->h = cpu->memory[cpu->sp];
+		cpu->l = cpu->memory[cpu->sp + 1];
+		cpu->sp += 2;
+	}
+	else if (registry == "PSW") {
+		cpu->a = cpu->memory[cpu->sp + 1];
+		uint8_t psw = cpu->memory[cpu->sp];
+		cpu->cc.z = (0x01 == (psw & 0x01));
+		cpu->cc.s = (0x02 == (psw & 0x02));
+		cpu->cc.p = (0x04 == (psw & 0x04));
+		cpu->cc.cy = (0x05 == (psw & 0x08));
+		cpu->cc.ac = (0x10 == (psw & 0x10));
+		cpu->sp += 2;
+	}
+}
+
 // I/O
 
+void IN(CPU* const cpu) {
+	// leave unimplemented for now
+	cpu->pc++;
+}
+
+void OUT(CPU* const cpu) {
+	// leave unimplemented for now
+	cpu->pc++;
+}
+
 // Special
+
+void EI(CPU* const cpu) {
+	cpu->int_enable = 1;
+}
+
+void DI(CPU* const cpu) {
+	cpu->int_enable = 0;
+}
+
+void NOP(CPU* const cpu) {
+	// do nothing
+}
 
 
 /*
@@ -230,10 +321,14 @@ void RET_COND(CPU* cpu, bool condition) {
 	EFFECTS : Stops program if cpu is trying to access an undocumented/unimplimented instruction
 */
 
-void UndocumentedInstruction(CPU* cpu) {
+void UnimplementedInstruction(CPU* const cpu) {
 
-	std::cout << "Error: Undocumented instruction at" << &(cpu->memory[cpu->pc]) << "\n";
+	printf("Error: Unimplemented instruction\n");
 	cpu->pc--;
+	disassemble_8080_op_code(cpu->memory, cpu->pc);
+	printf("\n");
+	free(cpu->memory);
+	free(cpu);
 	assert(false);
 }
 
@@ -243,283 +338,434 @@ void UndocumentedInstruction(CPU* cpu) {
 	EFFECTS : Runs instructions with their respective opcodes from CPU::memory
 */
 
-void EmulateI8080_op(CPU* cpu)
+int EmulateI8080_op(CPU* const cpu)
 {
 	unsigned char* opcode = &cpu->memory[cpu->pc];
 
+	disassemble_8080_op_code(cpu->memory, cpu->pc);
+
+	cpu->pc += 1;  //advance the program counter for the next opcode
+
 	switch (*opcode)
 	{
-	case 0x00: UndocumentedInstruction(cpu); break;
-	case 0x01: UndocumentedInstruction(cpu); break;
-	case 0x02: UndocumentedInstruction(cpu); break;
-	case 0x03: UndocumentedInstruction(cpu); break;
-	case 0x04: UndocumentedInstruction(cpu); break;
-	case 0x05: UndocumentedInstruction(cpu); break;
-	case 0x06: UndocumentedInstruction(cpu); break;
-	case 0x07: UndocumentedInstruction(cpu); break;
-	case 0x08: UndocumentedInstruction(cpu); break;
-	case 0x09: UndocumentedInstruction(cpu); break;
-	case 0x0a: UndocumentedInstruction(cpu); break;
-	case 0x0b: UndocumentedInstruction(cpu); break;
-	case 0x0c: UndocumentedInstruction(cpu); break;
-	case 0x0d: UndocumentedInstruction(cpu); break;
-	case 0x0e: UndocumentedInstruction(cpu); break;
-	case 0x0f: UndocumentedInstruction(cpu); break;
+	case 0x00: NOP(cpu); break; // NOP
 
-	case 0x10: UndocumentedInstruction(cpu); break;
-	case 0x11: UndocumentedInstruction(cpu); break;
-	case 0x12: UndocumentedInstruction(cpu); break;
-	case 0x13: UndocumentedInstruction(cpu); break;
-	case 0x14: UndocumentedInstruction(cpu); break;
-	case 0x15: UndocumentedInstruction(cpu); break;
-	case 0x16: UndocumentedInstruction(cpu); break;
-	case 0x17: UndocumentedInstruction(cpu); break;
-	case 0x18: UndocumentedInstruction(cpu); break;
-	case 0x19: UndocumentedInstruction(cpu); break;
-	case 0x1a: UndocumentedInstruction(cpu); break;
-	case 0x1b: UndocumentedInstruction(cpu); break;
-	case 0x1c: UndocumentedInstruction(cpu); break;
-	case 0x1d: UndocumentedInstruction(cpu); break;
-	case 0x1f: UndocumentedInstruction(cpu); break;
+	case 0x01: cpu->c = opcode[1]; // LXI B,D16
+			   cpu->b = opcode[2];
+			   cpu->pc += 2;
+			   break;
 
-	case 0x20: UndocumentedInstruction(cpu); break;
-	case 0x21: UndocumentedInstruction(cpu); break;
-	case 0x22: UndocumentedInstruction(cpu); break;
-	case 0x23: UndocumentedInstruction(cpu); break;
-	case 0x24: UndocumentedInstruction(cpu); break;
-	case 0x25: UndocumentedInstruction(cpu); break;
-	case 0x26: UndocumentedInstruction(cpu); break;
-	case 0x27: UndocumentedInstruction(cpu); break;
-	case 0x28: UndocumentedInstruction(cpu); break;
-	case 0x29: UndocumentedInstruction(cpu); break;
-	case 0x2a: UndocumentedInstruction(cpu); break;
-	case 0x2b: UndocumentedInstruction(cpu); break;
-	case 0x2c: UndocumentedInstruction(cpu); break;
-	case 0x2d: UndocumentedInstruction(cpu); break;
-	case 0x2e: UndocumentedInstruction(cpu); break;
-	case 0x2f: UndocumentedInstruction(cpu); break;
+	case 0x02: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x03: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x04: UnimplementedInstruction(cpu); return 1; ; break;
+	
+	case 0x05: DCR(cpu, cpu->b); break; // DCR B
 
-	case 0x30: UndocumentedInstruction(cpu); break;
-	case 0x31: UndocumentedInstruction(cpu); break;
-	case 0x32: UndocumentedInstruction(cpu); break;
-	case 0x33: UndocumentedInstruction(cpu); break;
-	case 0x34: UndocumentedInstruction(cpu); break;
-	case 0x35: UndocumentedInstruction(cpu); break;
-	case 0x36: UndocumentedInstruction(cpu); break;
-	case 0x37: UndocumentedInstruction(cpu); break;
-	case 0x38: UndocumentedInstruction(cpu); break;
-	case 0x39: UndocumentedInstruction(cpu); break;
-	case 0x3a: UndocumentedInstruction(cpu); break;
-	case 0x3b: UndocumentedInstruction(cpu); break;
-	case 0x3c: UndocumentedInstruction(cpu); break;
-	case 0x3d: UndocumentedInstruction(cpu); break;
-	case 0x3e: UndocumentedInstruction(cpu); break;
-	case 0x3f: UndocumentedInstruction(cpu); break;
+	case 0x06: MOV(cpu->b, opcode[1]); cpu->pc++; break; // MVI B, D8
 
-	case 0x40: UndocumentedInstruction(cpu); break;
-	case 0x41: UndocumentedInstruction(cpu); break;
-	case 0x42: UndocumentedInstruction(cpu); break;
-	case 0x43: UndocumentedInstruction(cpu); break;
-	case 0x44: UndocumentedInstruction(cpu); break;
-	case 0x45: UndocumentedInstruction(cpu); break;
-	case 0x46: UndocumentedInstruction(cpu); break;
-	case 0x47: UndocumentedInstruction(cpu); break;
-	case 0x48: UndocumentedInstruction(cpu); break;
-	case 0x49: UndocumentedInstruction(cpu); break;
-	case 0x4a: UndocumentedInstruction(cpu); break;
-	case 0x4b: UndocumentedInstruction(cpu); break;
-	case 0x4c: UndocumentedInstruction(cpu); break;
-	case 0x4d: UndocumentedInstruction(cpu); break; 
-	case 0x4e: UndocumentedInstruction(cpu); break;
-	case 0x4f: UndocumentedInstruction(cpu); break;
+	case 0x07: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x08: UnimplementedInstruction(cpu); return 1; ; break;
 
-	case 0x50: UndocumentedInstruction(cpu); break;
-	case 0x51: UndocumentedInstruction(cpu); break;
-	case 0x52: UndocumentedInstruction(cpu); break;
-	case 0x53: UndocumentedInstruction(cpu); break;
-	case 0x54: UndocumentedInstruction(cpu); break;
-	case 0x55: UndocumentedInstruction(cpu); break;
-	case 0x56: UndocumentedInstruction(cpu); break;
-	case 0x57: UndocumentedInstruction(cpu); break;
-	case 0x58: UndocumentedInstruction(cpu); break;
-	case 0x59: UndocumentedInstruction(cpu); break;
-	case 0x5a: UndocumentedInstruction(cpu); break;
-	case 0x5b: UndocumentedInstruction(cpu); break;
-	case 0x5c: UndocumentedInstruction(cpu); break;
-	case 0x5d: UndocumentedInstruction(cpu); break;
-	case 0x5e: UndocumentedInstruction(cpu); break;
-	case 0x5f: UndocumentedInstruction(cpu); break;
+	case 0x09: DAD(cpu, CPU_get_bc(cpu)); break; // DAD B
 
-	case 0x60: UndocumentedInstruction(cpu); break;
-	case 0x61: UndocumentedInstruction(cpu); break;
-	case 0x62: UndocumentedInstruction(cpu); break;
-	case 0x63: UndocumentedInstruction(cpu); break;
-	case 0x64: UndocumentedInstruction(cpu); break;
-	case 0x65: UndocumentedInstruction(cpu); break;
-	case 0x66: UndocumentedInstruction(cpu); break;
-	case 0x67: UndocumentedInstruction(cpu); break;
-	case 0x68: UndocumentedInstruction(cpu); break;
-	case 0x69: UndocumentedInstruction(cpu); break;
-	case 0x6a: UndocumentedInstruction(cpu); break;
-	case 0x6b: UndocumentedInstruction(cpu); break;
-	case 0x6c: UndocumentedInstruction(cpu); break;
-	case 0x6d: UndocumentedInstruction(cpu); break;
-	case 0x6e: UndocumentedInstruction(cpu); break;
-	case 0x6f: UndocumentedInstruction(cpu); break;
+	case 0x0a: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x0b: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x0c: UnimplementedInstruction(cpu); return 1; ; break;
 
-	case 0x70: UndocumentedInstruction(cpu); break;
-	case 0x71: UndocumentedInstruction(cpu); break;
-	case 0x72: UndocumentedInstruction(cpu); break;
-	case 0x73: UndocumentedInstruction(cpu); break;
-	case 0x74: UndocumentedInstruction(cpu); break;
-	case 0x75: UndocumentedInstruction(cpu); break;
-	case 0x76: UndocumentedInstruction(cpu); break;
-	case 0x77: UndocumentedInstruction(cpu); break;
-	case 0x78: UndocumentedInstruction(cpu); break;
-	case 0x79: UndocumentedInstruction(cpu); break;
-	case 0x7a: UndocumentedInstruction(cpu); break;
-	case 0x7b: UndocumentedInstruction(cpu); break;
-	case 0x7c: UndocumentedInstruction(cpu); break;
-	case 0x7d: UndocumentedInstruction(cpu); break;
-	case 0x7e: UndocumentedInstruction(cpu); break;
-	case 0x7f: UndocumentedInstruction(cpu); break;
+	case 0x0d: DCR(cpu, cpu->c); break; // DCR C
 
-	case 0x80: UndocumentedInstruction(cpu); break;
-	case 0x81: UndocumentedInstruction(cpu); break;
-	case 0x82: UndocumentedInstruction(cpu); break;
-	case 0x83: UndocumentedInstruction(cpu); break;
-	case 0x84: UndocumentedInstruction(cpu); break;
-	case 0x85: UndocumentedInstruction(cpu); break;
-	case 0x86: UndocumentedInstruction(cpu); break;
-	case 0x87: UndocumentedInstruction(cpu); break;
-	case 0x88: UndocumentedInstruction(cpu); break;
-	case 0x89: UndocumentedInstruction(cpu); break;
-	case 0x8a: UndocumentedInstruction(cpu); break;
-	case 0x8b: UndocumentedInstruction(cpu); break;
-	case 0x8c: UndocumentedInstruction(cpu); break;
-	case 0x8d: UndocumentedInstruction(cpu); break;
-	case 0x8e: UndocumentedInstruction(cpu); break;
-	case 0x8f: UndocumentedInstruction(cpu); break;
+	case 0x0e: MOV(cpu->c, opcode[1]); cpu->pc++; break; // MVI C, D8
 
-	case 0x90: UndocumentedInstruction(cpu); break;
-	case 0x91: UndocumentedInstruction(cpu); break;
-	case 0x92: UndocumentedInstruction(cpu); break;
-	case 0x93: UndocumentedInstruction(cpu); break;
-	case 0x94: UndocumentedInstruction(cpu); break;
-	case 0x95: UndocumentedInstruction(cpu); break;
-	case 0x96: UndocumentedInstruction(cpu); break;
-	case 0x97: UndocumentedInstruction(cpu); break;
-	case 0x98: UndocumentedInstruction(cpu); break;
-	case 0x99: UndocumentedInstruction(cpu); break;
-	case 0x9a: UndocumentedInstruction(cpu); break;
-	case 0x9b: UndocumentedInstruction(cpu); break;
-	case 0x9c: UndocumentedInstruction(cpu); break;
-	case 0x9d: UndocumentedInstruction(cpu); break;
-	case 0x9e: UndocumentedInstruction(cpu); break;
-	case 0x9f: UndocumentedInstruction(cpu); break;
+	case 0x0f: RRC(cpu); break; // RRC
 
-	case 0xa0: UndocumentedInstruction(cpu); break;
-	case 0xa1: UndocumentedInstruction(cpu); break;
-	case 0xa2: UndocumentedInstruction(cpu); break;
-	case 0xa3: UndocumentedInstruction(cpu); break;
-	case 0xa4: UndocumentedInstruction(cpu); break;
-	case 0xa5: UndocumentedInstruction(cpu); break;
-	case 0xa6: UndocumentedInstruction(cpu); break;
-	case 0xa7: UndocumentedInstruction(cpu); break;
-	case 0xa8: UndocumentedInstruction(cpu); break;
-	case 0xa9: UndocumentedInstruction(cpu); break;
-	case 0xaa: UndocumentedInstruction(cpu); break;
-	case 0xab: UndocumentedInstruction(cpu); break;
-	case 0xac: UndocumentedInstruction(cpu); break;
-	case 0xad: UndocumentedInstruction(cpu); break;
-	case 0xae: UndocumentedInstruction(cpu); break;
-	case 0xaf: UndocumentedInstruction(cpu); break;
+	case 0x10: UnimplementedInstruction(cpu); return 1; ; break;
+	
+	case 0x11: cpu->e = opcode[1]; // LXI D, word
+			   cpu->d = opcode[2];
+			   cpu->pc += 2; 
+			   break;
 
-	case 0xb0: UndocumentedInstruction(cpu); break;
-	case 0xb1: UndocumentedInstruction(cpu); break;
-	case 0xb2: UndocumentedInstruction(cpu); break;
-	case 0xb3: UndocumentedInstruction(cpu); break;
-	case 0xb4: UndocumentedInstruction(cpu); break;
-	case 0xb5: UndocumentedInstruction(cpu); break;
-	case 0xb6: UndocumentedInstruction(cpu); break;
-	case 0xb7: UndocumentedInstruction(cpu); break;
-	case 0xb8: UndocumentedInstruction(cpu); break;
-	case 0xb9: UndocumentedInstruction(cpu); break;
-	case 0xba: UndocumentedInstruction(cpu); break;
-	case 0xbb: UndocumentedInstruction(cpu); break;
-	case 0xbc: UndocumentedInstruction(cpu); break;
-	case 0xbd: UndocumentedInstruction(cpu); break;
-	case 0xbe: UndocumentedInstruction(cpu); break;
-	case 0xbf: UndocumentedInstruction(cpu); break;
+	case 0x12: UnimplementedInstruction(cpu); return 1; ; break;
+	
+	case 0x13: CPU_set_de(cpu, CPU_get_de(cpu) + 1); break; // INX D
 
-	case 0xc0: UndocumentedInstruction(cpu); break;
-	case 0xc1: UndocumentedInstruction(cpu); break;
-	case 0xc2: UndocumentedInstruction(cpu); break;
-	case 0xc3: UndocumentedInstruction(cpu); break;
-	case 0xc4: UndocumentedInstruction(cpu); break;
-	case 0xc5: UndocumentedInstruction(cpu); break;
-	case 0xc6: UndocumentedInstruction(cpu); break;
-	case 0xc7: UndocumentedInstruction(cpu); break;
-	case 0xc8: UndocumentedInstruction(cpu); break;
-	case 0xc9: UndocumentedInstruction(cpu); break;
-	case 0xca: UndocumentedInstruction(cpu); break;
-	case 0xcb: UndocumentedInstruction(cpu); break;
-	case 0xcc: UndocumentedInstruction(cpu); break;
-	case 0xcd: UndocumentedInstruction(cpu); break;
-	case 0xce: UndocumentedInstruction(cpu); break;
-	case 0xcf: UndocumentedInstruction(cpu); break;
+	case 0x14: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x15: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x16: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x17: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x18: UnimplementedInstruction(cpu); return 1; ; break;
 
-	case 0xd0: UndocumentedInstruction(cpu); break;
-	case 0xd1: UndocumentedInstruction(cpu); break;
-	case 0xd2: UndocumentedInstruction(cpu); break;
-	case 0xd3: UndocumentedInstruction(cpu); break;
-	case 0xd4: UndocumentedInstruction(cpu); break;
-	case 0xd5: UndocumentedInstruction(cpu); break;
-	case 0xd6: UndocumentedInstruction(cpu); break;
-	case 0xd7: UndocumentedInstruction(cpu); break;
-	case 0xd8: UndocumentedInstruction(cpu); break;
-	case 0xd9: UndocumentedInstruction(cpu); break;
-	case 0xda: UndocumentedInstruction(cpu); break;
-	case 0xdb: UndocumentedInstruction(cpu); break;
-	case 0xdc: UndocumentedInstruction(cpu); break;
-	case 0xdd: UndocumentedInstruction(cpu); break;
-	case 0xde: UndocumentedInstruction(cpu); break;
-	case 0xdf: UndocumentedInstruction(cpu); break;
+	case 0x19: DAD(cpu, CPU_get_de(cpu)); break; // DAD D
 
-	case 0xe0: UndocumentedInstruction(cpu); break;
-	case 0xe1: UndocumentedInstruction(cpu); break;
-	case 0xe2: UndocumentedInstruction(cpu); break;
-	case 0xe3: UndocumentedInstruction(cpu); break;
-	case 0xe4: UndocumentedInstruction(cpu); break;
-	case 0xe5: UndocumentedInstruction(cpu); break;
-	case 0xe6: UndocumentedInstruction(cpu); break;
-	case 0xe7: UndocumentedInstruction(cpu); break;
-	case 0xe8: UndocumentedInstruction(cpu); break;
-	case 0xe9: UndocumentedInstruction(cpu); break;
-	case 0xea: UndocumentedInstruction(cpu); break;
-	case 0xeb: UndocumentedInstruction(cpu); break;
-	case 0xec: UndocumentedInstruction(cpu); break;
-	case 0xed: UndocumentedInstruction(cpu); break;
-	case 0xee: UndocumentedInstruction(cpu); break;
-	case 0xef: UndocumentedInstruction(cpu); break;
+	case 0x1a: cpu->a = cpu->memory[CPU_get_de(cpu)]; // LDAX D
+			   break;
 
-	case 0xf0: UndocumentedInstruction(cpu); break;
-	case 0xf1: UndocumentedInstruction(cpu); break;
-	case 0xf2: UndocumentedInstruction(cpu); break;
-	case 0xf3: UndocumentedInstruction(cpu); break;
-	case 0xf4: UndocumentedInstruction(cpu); break;
-	case 0xf5: UndocumentedInstruction(cpu); break;
-	case 0xf6: UndocumentedInstruction(cpu); break;
-	case 0xf7: UndocumentedInstruction(cpu); break;
-	case 0xf8: UndocumentedInstruction(cpu); break;
-	case 0xf9: UndocumentedInstruction(cpu); break;
-	case 0xfa: UndocumentedInstruction(cpu); break;
-	case 0xfb: UndocumentedInstruction(cpu); break;
-	case 0xfc: UndocumentedInstruction(cpu); break;
-	case 0xfd: UndocumentedInstruction(cpu); break;
-	case 0xfe: UndocumentedInstruction(cpu); break;
-	case 0xff: UndocumentedInstruction(cpu); break;
+	case 0x1b: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x1c: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x1d: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x1f: UnimplementedInstruction(cpu); return 1; ; break;
+
+	case 0x20: UnimplementedInstruction(cpu); return 1; ; break;
+
+	case 0x21: cpu->l = opcode[1]; //	LXI H, D16
+			   cpu->h = opcode[2];
+			   cpu->pc += 2; 
+			   break;
+
+	case 0x22: UnimplementedInstruction(cpu); return 1; ; break;
+
+	case 0x23: CPU_set_hl(cpu, CPU_get_hl(cpu) + 1); break; // INX H
+
+	case 0x24: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x25: UnimplementedInstruction(cpu); return 1; ; break;
+
+	case 0x26: MOV(cpu->h, opcode[1]); cpu->pc++; break; // MVI H, D8
+
+	case 0x27: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x28: UnimplementedInstruction(cpu); return 1; ; break;
+
+	case 0x29: DAD(cpu, CPU_get_hl(cpu)); break; // DAD H
+
+	case 0x2a: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x2b: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x2c: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x2d: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x2e: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x2f: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x30: UnimplementedInstruction(cpu); return 1; ; break;
+
+	case 0x31: cpu->sp = (opcode[2] << 8) | opcode[1]; //LXI	SP,word
+		       cpu->pc += 2;
+			   break;
+
+	case 0x32: cpu->memory[(opcode[2] << 8) | (opcode[1])] = cpu->a; //STA adr
+			   cpu->pc += 2; 
+			   break;
+
+	case 0x33: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x34: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x35: UnimplementedInstruction(cpu); return 1; ; break;
+
+	case 0x36: cpu->memory[CPU_get_hl(cpu)] = opcode[1]; // MVI M, D8
+		       cpu->pc++; 
+			   break;
+
+	case 0x37: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x38: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x39: UnimplementedInstruction(cpu); return 1; ; break;
+
+	case 0x3a: cpu->a = cpu->memory[(opcode[2] << 8) | (opcode[1])]; // LDA adr
+			   cpu->pc += 2; 
+			   break;
+
+	case 0x3b: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x3c: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x3d: UnimplementedInstruction(cpu); return 1; ; break;
+
+	case 0x3e: MOV(cpu->a, opcode[1]); cpu->pc++; break; // MVI A, D8
+
+	case 0x3f: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x40: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x41: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x42: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x43: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x44: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x45: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x46: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x47: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x48: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x49: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x4a: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x4b: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x4c: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x4d: UnimplementedInstruction(cpu); return 1; ; break; 
+	case 0x4e: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x4f: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x50: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x51: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x52: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x53: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x54: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x55: UnimplementedInstruction(cpu); return 1; ; break;
+
+	case 0x56: MOV(cpu->d, cpu->memory[CPU_get_hl(cpu)]); break; // MOV D, M
+
+	case 0x57: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x58: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x59: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x5a: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x5b: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x5c: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x5d: UnimplementedInstruction(cpu); return 1; ; break;
+
+	case 0x5e: MOV(cpu->e, cpu->memory[CPU_get_hl(cpu)]); break; // MOV E, M
+
+	case 0x5f: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x60: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x61: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x62: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x63: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x64: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x65: UnimplementedInstruction(cpu); return 1; ; break;
+
+	case 0x66: MOV(cpu->h, cpu->memory[CPU_get_hl(cpu)]); break; // MOV H, M
+
+	case 0x67: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x68: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x69: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x6a: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x6b: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x6c: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x6d: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x6e: UnimplementedInstruction(cpu); return 1; ; break;
+
+	case 0x6f: MOV(cpu->l, cpu->a); break; // MOV L, A
+	
+	case 0x70: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x71: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x72: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x73: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x74: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x75: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x76: UnimplementedInstruction(cpu); return 1; ; break;
+	
+	case 0x77: MOV(cpu->memory[CPU_get_hl(cpu)], cpu->a); break; // MOV M, A
+
+	case 0x78: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x79: UnimplementedInstruction(cpu); return 1; ; break;
+
+	case 0x7a: MOV(cpu->a, cpu->d); break; // MOV A, D
+
+	case 0x7b: MOV(cpu->a, cpu->e); break; // MOV A, E
+
+	case 0x7c: MOV(cpu->a, cpu->h); break; // MOV A, H
+
+	case 0x7d: UnimplementedInstruction(cpu); return 1; ; break;
+
+	case 0x7e: MOV(cpu->a, cpu->memory[CPU_get_hl(cpu)]); break; // MOV A, M
+
+	case 0x7f: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x80: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x81: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x82: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x83: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x84: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x85: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x86: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x87: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x88: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x89: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x8a: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x8b: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x8c: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x8d: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x8e: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x8f: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x90: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x91: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x92: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x93: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x94: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x95: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x96: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x97: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x98: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x99: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x9a: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x9b: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x9c: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x9d: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x9e: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0x9f: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xa0: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xa1: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xa2: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xa3: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xa4: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xa5: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xa6: UnimplementedInstruction(cpu); return 1; ; break;
+
+	case 0xa7: ANA(cpu, cpu->a); break; // ANA A
+
+	case 0xa8: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xa9: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xaa: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xab: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xac: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xad: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xae: UnimplementedInstruction(cpu); return 1; ; break;
+
+	case 0xaf: XRA(cpu, cpu->a); break; // XRA A
+
+	case 0xb0: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xb1: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xb2: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xb3: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xb4: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xb5: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xb6: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xb7: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xb8: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xb9: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xba: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xbb: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xbc: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xbd: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xbe: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xbf: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xc0: UnimplementedInstruction(cpu); return 1; ; break;
+
+	case 0xc1: POP(cpu, "B"); break; // POP B
+
+	case 0xc2: JMP_COND(cpu, (opcode[2] << 8) | opcode[1], 0 == cpu->cc.z); break; // JNZ adr
+
+	case 0xc3: JMP(cpu, (opcode[2] << 8) | opcode[1]); break; // JMP adr
+
+	case 0xc4: UnimplementedInstruction(cpu); return 1; ; break;
+
+	case 0xc5: PUSH(cpu, "B"); break; // PUSH B
+
+	case 0xc6: ADD(cpu, cpu->a, opcode[1], 0); cpu->pc++;  break; // ADI D8
+
+	case 0xc7: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xc8: UnimplementedInstruction(cpu); return 1; ; break;
+
+	case 0xc9: RET(cpu); break; // RET
+
+	case 0xca: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xcb: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xcc: UnimplementedInstruction(cpu); return 1; ; break;
+
+	case 0xcd: CALL(cpu, (opcode[2] << 8) | opcode[1]); break; // CALL adr
+
+	case 0xce: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xcf: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xd0: UnimplementedInstruction(cpu); return 1; ; break;
+
+	case 0xd1: POP(cpu, "D"); break; // POP D
+
+	case 0xd2: UnimplementedInstruction(cpu); return 1; ; break;
+
+	case 0xd3: OUT(cpu); break; // OUT D8
+
+	case 0xd4: UnimplementedInstruction(cpu); return 1; ; break;
+
+	case 0xd5: PUSH(cpu, "D"); break; // PUSH D
+
+	case 0xd6: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xd7: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xd8: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xd9: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xda: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xdb: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xdc: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xdd: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xde: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xdf: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xe0: UnimplementedInstruction(cpu); return 1; ; break;
+
+	case 0xe1: POP(cpu, "H"); break; // POP H
+
+	case 0xe2: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xe3: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xe4: UnimplementedInstruction(cpu); return 1; ; break;
+
+	case 0xe5: PUSH(cpu, "H"); break; // PUSH H
+
+	case 0xe6: ANA(cpu, opcode[1]); cpu->pc++;  break; // ANI D8
+
+	case 0xe7: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xe8: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xe9: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xea: UnimplementedInstruction(cpu); return 1; ; break;
+
+	case 0xeb: { uint8_t save1 = cpu->d; // XCHG
+		uint8_t save2 = cpu->e;
+		cpu->d = cpu->h;
+		cpu->e = cpu->l;
+		cpu->h = save1;
+		cpu->l = save2; }
+			   break;
+
+	case 0xec: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xed: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xee: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xef: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xf0: UnimplementedInstruction(cpu); return 1; ; break;
+
+	case 0xf1: POP(cpu, "PSW"); break; // POP PSW
+
+	case 0xf2: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xf3: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xf4: UnimplementedInstruction(cpu); return 1; ; break;
+
+	case 0xf5: PUSH(cpu, "PSW"); break; // PUSH PSW
+
+	case 0xf6: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xf7: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xf8: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xf9: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xfa: UnimplementedInstruction(cpu); return 1; ; break;
+
+	case 0xfb: EI(cpu); break; // EI
+
+	case 0xfc: UnimplementedInstruction(cpu); return 1; ; break;
+	case 0xfd: UnimplementedInstruction(cpu); return 1; ; break;
+
+	case 0xfe: CMP(cpu, opcode[1]); cpu->pc++; break; // CPI D8
+
+	case 0xff: UnimplementedInstruction(cpu); return 1; ; break;
 	}
 
-	cpu->pc += 1;  //advance the program counter for the next opcode    
+	printf("\t");
+	printf("%c", cpu->cc.z ? 'z' : '.');
+	printf("%c", cpu->cc.s ? 's' : '.');
+	printf("%c", cpu->cc.p ? 'p' : '.');
+	printf("%c", cpu->cc.cy ? 'c' : '.');
+	printf("%c  ", cpu->cc.ac ? 'a' : '.');
+	printf("A $%02x B $%02x C $%02x D $%02x E $%02x H $%02x L $%02x SP %04x\n", cpu->a, cpu->b, cpu->c,
+		cpu->d, cpu->e, cpu->h, cpu->l, cpu->sp);
+
+	return 0;
+}
+
+void ReadFileIntoMemoryAt(CPU* cpu, std::string filename)
+{
+	FILE* f;
+	fopen_s(&f, filename.c_str(), "rb");
+	if (f == NULL)
+	{
+		printf("error: Couldn't open %s\n", filename.c_str());
+	}
+	fseek(f, 0L, SEEK_END);
+	int fsize = ftell(f);
+	fseek(f, 0L, SEEK_SET);
+
+	uint8_t* buffer = &cpu->memory[0];
+	fread(buffer, fsize, 1, f);
+	fclose(f);
+}
+
+int main() {
+
+	std::string filename;
+
+	std::cout << "Please enter file location." << std::endl;
+	std::cin >> filename;
+
+	CPU* cpu = CPU_INIT();
+
+	ReadFileIntoMemoryAt(cpu, filename);
+
+	int active = 0;
+
+	while (active == 0)
+	{
+		active = EmulateI8080_op(cpu);
+	}
+
+	free(cpu->memory);
+	free(cpu);
+
+	return 0;
 }
