@@ -4,8 +4,8 @@
 #include <iostream>
 
 /*
-	REQUIRES: *codebuffer is a valid pointer to 8080 assembly code,
-			   pc is the current offset into the code
+    REQUIRES: *codebuffer is a valid pointer to 8080 assembly code,
+	       pc is the current offset into the code
     EFFECTS:   returns the number of bytes of the opcode
  */
 
