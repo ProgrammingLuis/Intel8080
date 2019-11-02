@@ -65,12 +65,12 @@ For now, I only have a working disassembler for files meant to run on the Intel 
 ### Prerequisites
 
 To run this program you will need to make a .exe with g++ or compile the .cpp file in Visual Studio.
-* g++
 * Visual Studio
 
 ### Installation
 ```sh
-g++ -Wall -pedantic disassembler.cpp
+Visual C++
+* To build this project in Visual C++, first download disassembler.h, disassembler.cpp, and CPU.cpp, then build and run the program.
 ```
 
 <!-- USAGE EXAMPLES -->
