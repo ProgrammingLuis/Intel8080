@@ -47,6 +47,7 @@ I have always wondered how emulators worked and making my own is my way of learn
 Things I have learned about while working on this project:
 * Assembly and how to make a disassembler.
 * CPUs/microprocessors
+* Hardware - displays/inputs
 * Better debugging practices :smile:
 
 This is just the start of my emulation journey. So I'll be emulating more hardware systems in the near future. Please let me know about any bugs/issues so that I can get better at this.
@@ -60,11 +61,11 @@ This was all done in Community Visual Studio 2019.
 <!-- GETTING STARTED -->
 ## Getting Started
 
-For now, I only have a working disassembler for files meant to run on the Intel 8080 microprocessor. 
+For now, Intel 8080 compiled files will run, but they are waiting for input from external hardware.This will be implemented soon.
 
 ### Prerequisites
 
-To run this program you will need to make a .exe with g++ or compile the .cpp file in Visual Studio.
+To run this program you will need to compile the files in Visual Studio.
 * Visual Studio
 
 ### Installation
@@ -114,16 +115,5 @@ Project Link: [https://https://github.com/ProgrammingLuis/Intel8080](https://htt
 
 <!-- MARKDOWN LINKS & IMAGES -->
 <!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
-[contributors-shield]: https://img.shields.io/github/contributors/othneildrew/Best-README-Template.svg?style=flat-square
-[contributors-url]: https://github.com/othneildrew/Best-README-Template/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/othneildrew/Best-README-Template.svg?style=flat-square
-[forks-url]: https://github.com/othneildrew/Best-README-Template/network/members
-[stars-shield]: https://img.shields.io/github/stars/othneildrew/Best-README-Template.svg?style=flat-square
-[stars-url]: https://github.com/othneildrew/Best-README-Template/stargazers
-[issues-shield]: https://img.shields.io/github/issues/othneildrew/Best-README-Template.svg?style=flat-square
-[issues-url]: https://github.com/othneildrew/Best-README-Template/issues
-[license-shield]: https://img.shields.io/github/license/othneildrew/Best-README-Template.svg?style=flat-square
-[license-url]: https://github.com/othneildrew/Best-README-Template/blob/master/LICENSE.txt
 [linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=flat-square&logo=linkedin&colorB=555
 [linkedin-url]: https://linkedin.com
-[product-screenshot]: images/screenshot.png
