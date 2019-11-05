@@ -57,6 +57,7 @@ A list of commonly used resources that I found helpful are listed in the acknowl
 ### Built With
 This was all done in Community Visual Studio 2019. 
 * C++
+* SDL (Simple DirectMedia Layer) library
 
 <!-- GETTING STARTED -->
 ## Getting Started
