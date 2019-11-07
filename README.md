@@ -117,4 +117,4 @@ Project Link: [https://https://github.com/ProgrammingLuis/Intel8080](https://htt
 <!-- MARKDOWN LINKS & IMAGES -->
 <!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
 [linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=flat-square&logo=linkedin&colorB=555
-[linkedin-url]: https://linkedin.com
+[linkedin-url]: https://www.linkedin.com/in/luis-hernandez-b7ba46197/
